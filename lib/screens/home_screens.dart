@@ -1,5 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:todo_app/models/task_model.dart';
 import 'package:todo_app/screens/add_task_screen.dart';
 
 class HomeScreens extends StatefulWidget {
@@ -10,7 +13,7 @@ class HomeScreens extends StatefulWidget {
 }
 
 class _HomeScreensState extends State<HomeScreens> {
-  List<String> tasks = [];
+  List<TaskModel> tasks = [];
 
   void initState() {
     super.initState();
@@ -19,22 +22,47 @@ class _HomeScreensState extends State<HomeScreens> {
 
   Future<void> _loadTasks() async {
     final prefs = await SharedPreferences.getInstance();
-    final storedTasks = prefs.getStringList('tasks') ?? [];
+    final taskJsonList = prefs.getStringList('tasks') ?? [];
+
     setState(() {
-      tasks = storedTasks;
+      tasks = taskJsonList
+          .map((taskJson) {
+            final decoded = jsonDecode(taskJson);
+            if (decoded is Map<String, dynamic>) {
+              return TaskModel.fromMap(decoded);
+            } else {
+              return null;
+            }
+          })
+          .whereType<TaskModel>()
+          .toList();
     });
   }
 
-  Future<void> _saveTask() async {
+  Future<void> _saveTasks() async {
     final prefs = await SharedPreferences.getInstance();
-    prefs.setStringList('tasks', tasks);
+
+    List<String> taskJsonList = tasks.map((task) {
+      final map = task.toMap();
+      return jsonEncode(map);
+    }).toList();
+
+    await prefs.setStringList('tasks', taskJsonList);
   }
 
-  void _addNewTask(String newTask) {
+  void _addNewTask(String title) {
+    final newTask = TaskModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: title,
+      createdAt: DateTime.now(),
+      isCompleted: false,
+    );
+
     setState(() {
       tasks.add(newTask);
     });
-    _saveTask();
+
+    _saveTasks();
   }
 
   @override
@@ -57,7 +85,7 @@ class _HomeScreensState extends State<HomeScreens> {
               itemCount: tasks.length,
               itemBuilder: (context, index) {
                 return Dismissible(
-                  key: Key(tasks[index]),
+                  key: Key(tasks[index].id),
                   direction: DismissDirection.endToStart,
                   background: Container(
                     color: Colors.red,
@@ -75,7 +103,7 @@ class _HomeScreensState extends State<HomeScreens> {
                     setState(() {
                       tasks.removeAt(index);
                     });
-                    _saveTask();
+                    _saveTasks();
                     ScaffoldMessenger.of(
                       context,
                     ).showSnackBar(
@@ -86,7 +114,7 @@ class _HomeScreensState extends State<HomeScreens> {
                   },
                   child: Card(
                     child: ListTile(
-                      title: Text(tasks[index]),
+                      title: Text(tasks[index].title),
                     ),
                   ),
                 );
